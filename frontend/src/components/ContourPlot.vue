@@ -2,7 +2,7 @@
   <div class="panel">
     <h3>🗺️ 2D等高线 + 优化路径</h3>
     <canvas ref="cvs" width="400" height="400" class="contour-canvas"></canvas>
-    <div class="info">🔵 起点 🟢 当前步 🔴 终点</div>
+    <div class="info">🔵 起点 🟢 当前步 🔴 终点 ⭐ 区间最优步</div>
   </div>
 </template>
 
@@ -19,11 +19,12 @@ function draw() {
   // Fill background
   ctx.fillStyle = '#0a1929'; ctx.fillRect(0, 0, W, H)
 
-  const path = store.result?.path || []
+  // 未算出的步只跳过不画
+  const path = store.validPath
   if (path.length === 0) return
 
   // Find ranges
-  const xs = path.map(p => p.x), ys = path.map(p => p.y)
+  const xs = path.map(p => p.x as number), ys = path.map(p => p.y as number)
   const xMin = Math.min(...xs), xMax = Math.max(...xs)
   const yMin = Math.min(...ys), yMax = Math.max(...ys)
   const padX = (xMax - xMin) * 0.2 || 1
@@ -41,50 +42,68 @@ function draw() {
   }
 
   // Draw heatmap-style fill based on z values
-  const zs = path.map(p => p.z); const zMin = Math.min(...zs), zMax = Math.max(...zs)
+  const zs = path.map(p => p.z as number); const zMin = Math.min(...zs), zMax = Math.max(...zs)
   const zr = zMax - zMin || 1
   for (const pt of path) {
-    const t = (pt.z - zMin) / zr
-    const px = tx(pt.x), py = ty(pt.y)
+    const t = ((pt.z as number) - zMin) / zr
+    const px = tx(pt.x as number), py = ty(pt.y as number)
     // blend: red (high) → blue (low)
     const r = Math.round(255 * t), b = Math.round(255 * (1 - t)), g = Math.round(128 * (1 - Math.abs(t - 0.5) * 2))
     ctx.fillStyle = `rgba(${r},${g},${b},0.3)`
     ctx.beginPath(); ctx.arc(px, py, 2.5, 0, Math.PI * 2); ctx.fill()
   }
 
-  // Draw path line
-  const animPath = store.currentPath()
+  // Draw path line up to current frame
+  const animPath = store.currentPath
   if (animPath.length > 1) {
     ctx.strokeStyle = 'rgba(0, 255, 200, 0.8)'; ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.moveTo(tx(animPath[0].x), ty(animPath[0].y))
-    for (let i = 1; i < animPath.length; i++) ctx.lineTo(tx(animPath[i].x), ty(animPath[i].y))
+    ctx.moveTo(tx(animPath[0].x as number), ty(animPath[0].y as number))
+    for (let i = 1; i < animPath.length; i++) ctx.lineTo(tx(animPath[i].x as number), ty(animPath[i].y as number))
     ctx.stroke()
   }
 
   // Start point
   ctx.fillStyle = '#4fc3f7'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2
-  ctx.beginPath(); ctx.arc(tx(path[0].x), ty(path[0].y), 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+  ctx.beginPath(); ctx.arc(tx(path[0].x as number), ty(path[0].y as number), 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
 
   // Current point
-  const cur = animPath[animPath.length - 1]
-  ctx.fillStyle = '#66bb6a'
-  ctx.beginPath(); ctx.arc(tx(cur.x), ty(cur.y), 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+  const cur = store.currentPoint
+  if (cur) {
+    ctx.fillStyle = '#66bb6a'
+    ctx.beginPath(); ctx.arc(tx(cur.x as number), ty(cur.y as number), 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+  }
 
   // Final point
   const last = path[path.length - 1]
   ctx.fillStyle = '#ef5350'
-  ctx.beginPath(); ctx.arc(tx(last.x), ty(last.y), 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+  ctx.beginPath(); ctx.arc(tx(last.x as number), ty(last.y as number), 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+
+  // Best step within current chart range
+  const best = store.bestInRange
+  if (best) {
+    ctx.strokeStyle = '#f5a623'; ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(tx(best.x as number), ty(best.y as number), 9, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.fillStyle = '#f5a623'
+    ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'center'
+    ctx.fillText('★', tx(best.x as number), ty(best.y as number) - 12)
+    ctx.textAlign = 'start'
+  }
 
   // Labels
   ctx.fillStyle = '#aaa'; ctx.font = '11px system-ui'
-  ctx.fillText(`x: ${cur.x.toFixed(3)}`, 10, 20)
-  ctx.fillText(`y: ${cur.y.toFixed(3)}`, 10, 36)
-  ctx.fillText(`f: ${cur.z.toFixed(4)}`, 10, 52)
+  if (cur) {
+    ctx.fillText(`步: ${cur.step}`, 10, 20)
+    ctx.fillText(`x: ${(cur.x as number).toFixed(3)}`, 10, 36)
+    ctx.fillText(`y: ${(cur.y as number).toFixed(3)}`, 10, 52)
+    ctx.fillText(`f: ${(cur.z as number).toExponential(3)}`, 10, 68)
+  }
 }
 
 onMounted(draw)
-watch(() => [store.result, store.animationStep], draw, { deep: true })
+watch(() => [store.result, store.animationStep, store.rangeStart, store.rangeEnd], draw, { deep: true })
 </script>
 
 <style scoped>

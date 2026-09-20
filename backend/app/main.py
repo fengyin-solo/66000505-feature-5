@@ -61,7 +61,17 @@ def optimize(req: OptimizationRequest):
     ]))
 
     x, y = req.x0, req.y0
-    path = [{"step": 0, "x": x, "y": y, "z": fn(x, y)}]
+
+    def pack(step: int, xv: float, yv: float, zv: float) -> dict:
+        # 数值发散（NaN/Inf）视为该步未算出，输出 null 供前端跳过不画
+        return {
+            "step": step,
+            "x": float(xv) if math.isfinite(xv) else None,
+            "y": float(yv) if math.isfinite(yv) else None,
+            "z": float(zv) if math.isfinite(zv) else None,
+        }
+
+    path = [pack(0, x, y, fn(x, y))]
 
     if req.algorithm == "gradient_descent":
         vx, vy = 0.0, 0.0
@@ -70,7 +80,7 @@ def optimize(req: OptimizationRequest):
             vx = req.momentum * vx - req.learningRate * g[0]
             vy = req.momentum * vy - req.learningRate * g[1]
             x += vx; y += vy
-            path.append({"step": i + 1, "x": x, "y": y, "z": fn(x, y)})
+            path.append(pack(i + 1, x, y, fn(x, y)))
 
     elif req.algorithm == "newton":
         hess_fn = HESSIANS.get(req.functionId)
@@ -80,7 +90,7 @@ def optimize(req: OptimizationRequest):
                 g = g_fn(x, y)
                 x -= req.learningRate * g[0]
                 y -= req.learningRate * g[1]
-                path.append({"step": i + 1, "x": x, "y": y, "z": fn(x, y)})
+                path.append(pack(i + 1, x, y, fn(x, y)))
         else:
             for i in range(req.iterations):
                 g = g_fn(x, y)
@@ -90,7 +100,7 @@ def optimize(req: OptimizationRequest):
                 except np.linalg.LinAlgError:
                     dx = -g * req.learningRate
                 x += dx[0]; y += dx[1]
-                path.append({"step": i + 1, "x": x, "y": y, "z": fn(x, y)})
+                path.append(pack(i + 1, x, y, fn(x, y)))
 
     elif req.algorithm == "conjugate_gradient":
         g = g_fn(x, y)
@@ -104,7 +114,7 @@ def optimize(req: OptimizationRequest):
             beta = max(0, (g_new @ g_new) / (g @ g + 1e-10))
             d = -g_new + beta * d
             x, y, g = x_new, y_new, g_new
-            path.append({"step": i + 1, "x": x, "y": y, "z": fn(x, y)})
+            path.append(pack(i + 1, x, y, fn(x, y)))
 
     elif req.algorithm == "simulated_annealing":
         T = req.temperature
@@ -121,14 +131,16 @@ def optimize(req: OptimizationRequest):
                     best_x, best_y = x, y
                     best_z = fn(x, y)
             T *= req.coolingRate
-            path.append({"step": i + 1, "x": x, "y": y, "z": fn(x, y)})
+            path.append(pack(i + 1, x, y, fn(x, y)))
 
-    final = path[-1]
+    # 以最后一个真正算出来的步作为最终点；全部发散则为 None
+    valid = [p for p in path if p["z"] is not None and p["x"] is not None and p["y"] is not None]
+    final = valid[-1] if valid else None
     return {
         "params": req.model_dump(),
         "path": path,
-        "finalPoint": [final["x"], final["y"]],
-        "finalValue": final["z"],
+        "finalPoint": [final["x"], final["y"]] if final else [None, None],
+        "finalValue": final["z"] if final else None,
         "iterations": len(path) - 1,
-        "converged": abs(final["z"]) < 1e-3 or len(path) >= req.iterations
+        "converged": (final is not None and abs(final["z"]) < 1e-3) or len(path) - 1 >= req.iterations
     }

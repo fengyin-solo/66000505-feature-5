@@ -26,16 +26,16 @@ export interface OptimizationParams {
 
 export interface IterationPoint {
   step: number
-  x: number
-  y: number
-  z: number
+  x: number | null
+  y: number | null
+  z: number | null
 }
 
 export interface OptimizationResult {
   params: OptimizationParams
   path: IterationPoint[]
-  finalPoint: [number, number]
-  finalValue: number
+  finalPoint: [number | null, number | null]
+  finalValue: number | null
   iterations: number
   converged: boolean
 }

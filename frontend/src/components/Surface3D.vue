@@ -29,13 +29,14 @@ function initScene() {
 }
 function buildSurface() {
   surfaceGroup.clear(); pathGroup.clear()
-  const path = store.result?.path || []; if (!path.length) return
-  const xs = path.map(p => p.x), ys = path.map(p => p.y), zs = path.map(p => p.z)
+  // 未算出的步只跳过不画
+  const path = store.validPath; if (!path.length) return
+  const xs = path.map(p => p.x as number), ys = path.map(p => p.y as number), zs = path.map(p => p.z as number)
   const xMin = Math.min(...xs), xMax = Math.max(...xs), yMin = Math.min(...ys), yMax = Math.max(...ys)
   const zMin = Math.min(...zs), zMax = Math.max(...zs)
   const px = xMax - xMin || 1, py = yMax - yMin || 1, pz = zMax - zMin || 1
   const scale = 3
-  const map = (x: number, y: number) => ((x - xMin) / px - 0.5) * scale
+  const map = (x: number) => ((x - xMin) / px - 0.5) * scale
   const mapy = (y: number) => ((y - yMin) / py - 0.5) * scale
   const mapz = (z: number) => ((z - zMin) / pz) * 2
 
@@ -43,8 +44,8 @@ function buildSurface() {
   const geom = new THREE.BufferGeometry()
   const positions: number[] = [], colors: number[] = []
   for (const pt of path) {
-    positions.push(map(pt.x, pt.y), mapz(pt.z), mapy(pt.y))
-    const t = (pt.z - zMin) / pz
+    positions.push(map(pt.x as number), mapz(pt.z as number), mapy(pt.y as number))
+    const t = ((pt.z as number) - zMin) / pz
     colors.push(t, 0.3 * (1 - t), 1 - t)
   }
   geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
@@ -52,14 +53,14 @@ function buildSurface() {
   const mat = new THREE.PointsMaterial({ size: 0.05, vertexColors: true, blending: THREE.AdditiveBlending, depthWrite: false })
   surfaceGroup.add(new THREE.Points(geom, mat))
 
-  // Path line
-  const animPath = store.currentPath()
+  // Path line up to current frame
+  const animPath = store.currentPath
   if (animPath.length > 1) {
     const lineGeom = new THREE.BufferGeometry()
     const pts: number[] = []
-    for (const pt of animPath) pts.push(map(pt.x, pt.y), mapz(pt.z), mapy(pt.y))
+    for (const pt of animPath) pts.push(map(pt.x as number), mapz(pt.z as number), mapy(pt.y as number))
     lineGeom.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
-    pathGroup.add(new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color: 0x00ffcc, linewidth: 1 })))
+    pathGroup.add(new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color: 0x00ffcc })))
   }
 
   // Start/current/end markers
@@ -68,14 +69,26 @@ function buildSurface() {
     s.position.set(x, z, y); pathGroup.add(s)
   }
   if (path.length) {
-    const first = path[0]; marker(map(first.x, first.y), mapy(first.y), mapz(first.z), 0x4fc3f7, 0.14)
-    const cur = animPath[animPath.length - 1]; marker(map(cur.x, cur.y), mapy(cur.y), mapz(cur.z), 0x66bb6a, 0.12)
-    const last = path[path.length - 1]; marker(map(last.x, last.y), mapy(last.y), mapz(last.z), 0xef5350, 0.14)
+    const first = path[0]; marker(map(first.x as number), mapy(first.y as number), mapz(first.z as number), 0x4fc3f7, 0.14)
+    const cur = store.currentPoint
+    if (cur) marker(map(cur.x as number), mapy(cur.y as number), mapz(cur.z as number), 0x66bb6a, 0.12)
+    const last = path[path.length - 1]; marker(map(last.x as number), mapy(last.y as number), mapz(last.z as number), 0xef5350, 0.14)
+    const best = store.bestInRange
+    if (best) {
+      // 金色圆环标记当前区间最优步
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.16, 0.02, 12, 32),
+        new THREE.MeshBasicMaterial({ color: 0xf5a623 })
+      )
+      ring.position.set(map(best.x as number), mapz(best.z as number), mapy(best.y as number))
+      ring.rotation.x = Math.PI / 2
+      pathGroup.add(ring)
+    }
   }
 }
 function animate() { animId = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera) }
 onMounted(() => { initScene(); buildSurface(); animate() })
-watch(() => [store.result, store.animationStep], buildSurface, { deep: true })
+watch(() => [store.result, store.animationStep, store.rangeStart, store.rangeEnd], buildSurface, { deep: true })
 onUnmounted(() => { cancelAnimationFrame(animId); renderer?.dispose() })
 </script>
 

@@ -6,22 +6,29 @@
     </header>
     <main class="app-main">
       <ControlPanel />
-      <div class="vis-grid" v-if="store.result">
+      <div v-if="store.loading" class="loading-hint">⏳ 正在计算迭代路径…</div>
+      <div class="vis-grid" v-else-if="store.result">
         <div class="vis-item"><ContourPlot /></div>
         <div class="vis-item"><Surface3D /></div>
       </div>
-      <ConvergenceChart v-if="store.result" />
+      <ConvergenceChart v-if="store.result && !store.loading" />
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import ControlPanel from './components/ControlPanel.vue'
 import ContourPlot from './components/ContourPlot.vue'
 import Surface3D from './components/Surface3D.vue'
 import ConvergenceChart from './components/ConvergenceChart.vue'
 import { useOptimizationStore } from './store/optimization'
 const store = useOptimizationStore()
+
+onMounted(async () => {
+  // 刷新后按上次口径恢复：重跑上次参数，区间与定位帧随结果一起还原
+  await store.restoreSession()
+})
 </script>
 
 <style>
@@ -33,4 +40,5 @@ body{font-family:system-ui,sans-serif;background:#f5f6fa}
 .subtitle{opacity:.8;margin-top:4px;font-size:.85rem}
 .app-main{padding:16px 40px}
 .vis-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.loading-hint{margin-top:24px;text-align:center;color:#888;font-size:14px}
 </style>
