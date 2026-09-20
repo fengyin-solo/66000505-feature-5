@@ -31,6 +31,8 @@ export interface IterationPoint {
   z: number
 }
 
+export type StepRange = [number, number]
+
 export interface OptimizationResult {
   params: OptimizationParams
   path: IterationPoint[]

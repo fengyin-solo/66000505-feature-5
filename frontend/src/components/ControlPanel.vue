@@ -54,7 +54,9 @@ const store = useOptimizationStore()
 const form = reactive({
   algorithm: 'gradient_descent', functionId: 'rosenbrock',
   x0: -1.5, y0: 2.5, learningRate: 0.01, iterations: 100,
-  momentum: 0.9, temperature: 100, coolingRate: 0.95
+  momentum: 0.9, temperature: 100, coolingRate: 0.95,
+  // 刷新后按上次运行的参数恢复表单
+  ...(store.lastParams ?? {})
 })
 
 const animStep = ref(0)
